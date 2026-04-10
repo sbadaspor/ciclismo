@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VeloAposta — Jogo de Ciclismo</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --c-bg: #0a0a0f;
+    --c-surface: #13131c;
+    --c-surface2: #1c1c2b;
+    --c-border: rgba(255,255,255,0.08);
+    --c-border2: rgba(255,255,255,0.15);
+    --c-text: #f0eeea;
+    --c-text2: #8a8899;
+    --c-accent: #e8c84a;
+    --c-accent2: #f0d870;
+    --c-red: #e24b4a;
+    --c-green: #3dba7e;
+    --c-blue: #4a8fe8;
+    --c-purple: #9b7fe8;
+    --font-display: 'Bebas Neue', sans-serif;
+    --font-body: 'DM Sans', sans-serif;
+    --r: 10px;
+    --r2: 16px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--c-bg);
+    color: var(--c-text);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(10,10,15,0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--c-border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 2rem;
+    height: 60px;
+  }
+
+  .nav-logo { font-family: var(--font-display); font-size: 26px; letter-spacing: 1px; color: var(--c-accent); }
+  .nav-logo span { color: var(--c-text); }
+  .nav-tabs { display: flex; gap: 0; }
+  .nav-tab {
+    background: none; border: none; cursor: pointer;
+    font-family: var(--font-body); font-size: 13px; font-weight: 500;
+    color: var(--c-text2); padding: 0 1.2rem; height: 60px;
+    border-bottom: 2px solid transparent;
+    transition: color 0.2s, border-color 0.2s;
+    letter-spacing: 0.02em; text-transform: uppercase;
+  }
+  .nav-tab:hover { color: var(--c-text); }
+  .nav-tab.active { color: var(--c-accent); border-bottom-color: var(--c-accent); }
+  .nav-admin-btn {
+    background: none; border: 1px solid var(--c-border2); cursor: pointer;
+    font-family: var(--font-body); font-size: 12px; font-weight: 500;
+    color: var(--c-text2); padding: 6px 14px; border-radius: 6px;
+    transition: all 0.2s; letter-spacing: 0.05em; text-transform: uppercase;
+  }
+  .nav-admin-btn:hover { color: var(--c-accent); border-color: var(--c-accent); }
+
+  .page { display: none; padding: 2rem; max-width: 1200px; margin: 0 auto; }
+  .page.active { display: block; }
+
+  .section-header {
+    display: flex; align-items: baseline; gap: 1rem;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid var(--c-border);
+    padding-bottom: 0.75rem;
+  }
+  .section-title { font-family: var(--font-display); font-size: 28px; letter-spacing: 1px; color: var(--c-text); }
+  .section-badge {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.08em;
+    text-transform: uppercase; padding: 3px 10px;
+    border-radius: 4px; background: var(--c-surface2); color: var(--c-text2);
+  }
+  .section-badge.live { background: rgba(232,200,74,0.15); color: var(--c-accent); }
+
+  .card { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r2); padding: 1.5rem; margin-bottom: 1.5rem; }
+  .card-sm { background: var(--c-surface2); border: 1px solid var(--c-border); border-radius: var(--r); padding: 1rem 1.25rem; }
+
+  .rank-table { width: 100%; border-collapse: collapse; }
+  .rank-table th {
+    text-align: left; font-size: 11px; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--c-text2); padding: 0.5rem 1rem 0.75rem;
+    border-bottom: 1px solid var(--c-border);
+  }
+  .rank-table td { padding: 0.85rem 1rem; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 14px; }
+  .rank-table tr:last-child td { border-bottom: none; }
+  .rank-table tr:hover td { background: rgba(255,255,255,0.02); }
+  .rank-pos { font-family: var(--font-display); font-size: 20px; color: var(--c-text2); width: 40px; }
+  .rank-pos.gold { color: var(--c-accent); }
+  .rank-pos.silver { color: #b0b8c8; }
+  .rank-pos.bronze { color: #c87d3a; }
+  .rank-name { font-weight: 500; font-size: 15px; }
+  .rank-pts { font-family: var(--font-display); font-size: 22px; color: var(--c-accent); text-align: right; }
+  .rank-detail { font-size: 12px; color: var(--c-text2); }
+
+  .jersey-row { display: flex; gap: 0.5rem; margin-top: 0.3rem; flex-wrap: wrap; }
+  .jersey { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 500; }
+  .jersey.points { background: rgba(232,200,74,0.15); color: var(--c-accent); }
+  .jersey.mountain { background: rgba(232,75,74,0.15); color: var(--c-red); }
+  .jersey.youth { background: rgba(74,143,232,0.15); color: var(--c-blue); }
+  .jersey.miss { opacity: 0.4; }
+
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }
+  .stat-card { background: var(--c-surface2); border-radius: var(--r); padding: 1rem; text-align: center; }
+  .stat-val { font-family: var(--font-display); font-size: 32px; color: var(--c-accent); display: block; }
+  .stat-lbl { font-size: 11px; color: var(--c-text2); letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; }
+
+  .race-card { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r2); overflow: hidden; margin-bottom: 1rem; }
+  .race-header { padding: 1rem 1.5rem; display: flex; align-items: center; justify-content: space-between; cursor: pointer; transition: background 0.2s; }
+  .race-header:hover { background: rgba(255,255,255,0.02); }
+  .race-header h3 { font-family: var(--font-display); font-size: 22px; }
+  .race-status { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 10px; border-radius: 4px; }
+  .race-status.completed { background: rgba(61,186,126,0.15); color: var(--c-green); }
+  .race-status.live { background: rgba(232,200,74,0.15); color: var(--c-accent); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
+  .race-body { display: none; padding: 0 1.5rem 1.5rem; border-top: 1px solid var(--c-border); }
+  .race-body.open { display: block; }
+  .chevron { transition: transform 0.2s; font-size: 14px; color: var(--c-text2); }
+  .chevron.open { transform: rotate(180deg); }
+
+  .podium-row { display: grid; grid-template-columns: 32px 1fr 1fr auto; align-items: center; gap: 0.5rem 1rem; font-size: 13px; padding: 0.5rem 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+  .podium-row:last-child { border-bottom: none; }
+  .podium-pos { font-family: var(--font-display); font-size: 16px; color: var(--c-text2); }
+  .podium-name { font-weight: 500; }
+  .podium-team { color: var(--c-text2); font-size: 12px; }
+  .podium-time { font-size: 12px; color: var(--c-text2); text-align: right; }
+
+  .wins-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+  .win-card { background: var(--c-surface2); border-radius: var(--r); padding: 1rem; display: flex; flex-direction: column; gap: 0.5rem; }
+  .win-avatar { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px; background: rgba(232,200,74,0.15); color: var(--c-accent); }
+  .win-name { font-weight: 500; font-size: 14px; }
+  .win-count { font-family: var(--font-display); font-size: 36px; color: var(--c-accent); line-height: 1; }
+  .win-lbl { font-size: 11px; color: var(--c-text2); text-transform: uppercase; letter-spacing: 0.06em; }
+
+  .form-group { margin-bottom: 1rem; }
+  label { display: block; font-size: 12px; font-weight: 600; color: var(--c-text2); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 0.4rem; }
+  input, select, textarea { width: 100%; background: var(--c-surface2); border: 1px solid var(--c-border2); border-radius: 8px; color: var(--c-text); font-family: var(--font-body); font-size: 14px; padding: 10px 14px; outline: none; transition: border-color 0.2s; }
+  input:focus, select:focus, textarea:focus { border-color: var(--c-accent); }
+  select option { background: var(--c-surface); }
+
+  .btn { display: inline-flex; align-items: center; gap: 8px; background: var(--c-accent); color: #0a0a0f; border: none; border-radius: 8px; cursor: pointer; font-family: var(--font-body); font-size: 13px; font-weight: 600; padding: 10px 20px; letter-spacing: 0.04em; text-transform: uppercase; transition: all 0.2s; }
+  .btn:hover { background: var(--c-accent2); transform: translateY(-1px); }
+  .btn:active { transform: translateY(0); }
+  .btn.secondary { background: var(--c-surface2); color: var(--c-text); border: 1px solid var(--c-border2); }
+  .btn.secondary:hover { background: var(--c-surface); border-color: var(--c-text2); }
+  .btn.danger { background: var(--c-red); color: #fff; }
+  .btn.sm { padding: 6px 12px; font-size: 11px; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; }
+
+  @media (max-width: 700px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } nav { padding: 0 1rem; } .nav-logo { font-size: 22px; } .page { padding: 1rem; } }
+
+  .overlay { position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; backdrop-filter: blur(6px); }
+  .overlay.hidden { display: none; }
+  .login-box { background: var(--c-surface); border: 1px solid var(--c-border2); border-radius: var(--r2); padding: 2.5rem; width: 100%; max-width: 360px; text-align: center; }
+  .login-box h2 { font-family: var(--font-display); font-size: 32px; color: var(--c-accent); margin-bottom: 0.5rem; }
+  .login-box p { color: var(--c-text2); font-size: 13px; margin-bottom: 1.5rem; }
+  .login-error { color: var(--c-red); font-size: 13px; margin-top: 0.75rem; }
+
+  .top20-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; max-height: 400px; overflow-y: auto; padding-right: 4px; }
+  .cyclist-pick { background: var(--c-surface2); border: 1px solid var(--c-border); border-radius: 8px; padding: 8px 12px; display: flex; align-items: center; gap: 10px; cursor: pointer; transition: all 0.15s; font-size: 13px; }
+  .cyclist-pick:hover { border-color: var(--c-border2); }
+  .cyclist-pick.selected-top10 { border-color: var(--c-accent); background: rgba(232,200,74,0.08); }
+  .cyclist-pick.selected-top20 { border-color: var(--c-blue); background: rgba(74,143,232,0.08); }
+  .pick-num { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; background: var(--c-surface); color: var(--c-text2); flex-shrink: 0; }
+  .pick-num.top10 { background: var(--c-accent); color: #0a0a0f; }
+  .pick-num.top20 { background: var(--c-blue); color: #fff; }
+
+  .pick-slot-list { display: flex; flex-direction: column; gap: 4px; }
+  .pick-slot { background: var(--c-surface2); border: 1px dashed var(--c-border2); border-radius: 6px; padding: 6px 10px; font-size: 12px; color: var(--c-text2); display: flex; justify-content: space-between; align-items: center; min-height: 34px; }
+  .pick-slot.filled { border-style: solid; border-color: var(--c-border); color: var(--c-text); }
+  .pick-slot .remove-pick { cursor: pointer; color: var(--c-text2); font-size: 16px; line-height: 1; }
+  .pick-slot .remove-pick:hover { color: var(--c-red); }
+
+  .drag-hint { font-size: 12px; color: var(--c-text2); margin: 0.5rem 0 1rem; }
+
+  .toast { position: fixed; bottom: 2rem; right: 2rem; z-index: 999; background: var(--c-green); color: #fff; padding: 12px 20px; border-radius: 10px; font-size: 13px; font-weight: 500; transform: translateY(100px); opacity: 0; transition: all 0.3s; }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.error { background: var(--c-red); }
+
+  .live-banner { background: linear-gradient(90deg, rgba(232,200,74,0.05), rgba(232,200,74,0.1), rgba(232,200,74,0.05)); border: 1px solid rgba(232,200,74,0.2); border-radius: var(--r); padding: 0.75rem 1.25rem; display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; }
+  .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c-accent); flex-shrink: 0; animation: pulse 1.5s infinite; }
+  .live-text { font-size: 13px; color: var(--c-text2); }
+  .live-text strong { color: var(--c-accent); }
+
+  .api-status { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--c-text2); margin-bottom: 1rem; padding: 8px 12px; background: var(--c-surface2); border-radius: 8px; }
+  .api-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c-text2); flex-shrink: 0; }
+  .api-dot.ok { background: var(--c-green); animation: pulse 2s infinite; }
+  .api-dot.err { background: var(--c-red); }
+
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--c-surface2); border-radius: 3px; }
+
+  .empty-state { text-align: center; padding: 3rem 1rem; color: var(--c-text2); font-size: 14px; }
+  .empty-icon { font-size: 40px; margin-bottom: 0.75rem; opacity: 0.4; }
+
+  .tab-bar { display: flex; gap: 4px; margin-bottom: 1.5rem; background: var(--c-surface2); padding: 4px; border-radius: 10px; width: fit-content; }
+  .tab-pill { background: none; border: none; cursor: pointer; font-family: var(--font-body); font-size: 13px; font-weight: 500; color: var(--c-text2); padding: 6px 16px; border-radius: 7px; transition: all 0.2s; }
+  .tab-pill.active { background: var(--c-surface); color: var(--c-text); }
+
+  .compare-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; }
+  .compare-card { background: var(--c-surface2); border-radius: var(--r); overflow: hidden; }
+  .compare-card-header { padding: 0.75rem 1rem; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--c-border); }
+  .compare-card-name { font-weight: 500; font-size: 14px; }
+  .compare-card-pts { font-family: var(--font-display); font-size: 20px; color: var(--c-accent); }
+  .compare-pick-row { padding: 5px 1rem; display: flex; align-items: center; gap: 8px; font-size: 12px; border-bottom: 1px solid rgba(255,255,255,0.03); }
+  .compare-pick-row:last-child { border-bottom: none; }
+  .cpr-pos { width: 20px; font-family: var(--font-display); color: var(--c-text2); font-size: 14px; }
+  .cpr-name { flex: 1; }
+  .cpr-badge { font-size: 10px; padding: 1px 6px; border-radius: 3px; font-weight: 600; }
+  .cpr-badge.correct { background: rgba(61,186,126,0.2); color: var(--c-green); }
+  .cpr-badge.close { background: rgba(74,143,232,0.2); color: var(--c-blue); }
+  .cpr-badge.miss { background: rgba(255,255,255,0.05); color: var(--c-text2); }
+
+  .admin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  @media (max-width: 900px) { .admin-grid { grid-template-columns: 1fr; } }
+  .player-pill { display: flex; align-items: center; justify-content: space-between; background: var(--c-surface2); border-radius: 8px; padding: 8px 12px; margin-bottom: 6px; font-size: 13px; }
+  .player-pill-name { font-weight: 500; }
+  .player-pill-actions { display: flex; gap: 6px; }
+
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.2); border-top-color: var(--c-accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<!-- ADMIN LOGIN OVERLAY -->
+<div class="overlay hidden" id="adminOverlay">
+  <div class="login-box">
+    <h2>ADMIN</h2>
+    <p>Introduz a senha de administrador para aceder</p>
+    <div class="form-group">
+      <input type="password" id="adminPassInput" placeholder="Senha" autocomplete="off">
+    </div>
+    <button class="btn" style="width:100%" onclick="tryAdminLogin()">Entrar</button>
+    <button class="btn secondary" style="width:100%; margin-top:8px" onclick="closeAdminOverlay()">Cancelar</button>
+    <div class="login-error hidden" id="loginError">Senha incorreta. Tenta novamente.</div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<nav>
+  <div class="nav-logo">VELO<span>APOSTA</span></div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="showPage('home')">Classificação</button>
+    <button class="nav-tab" onclick="showPage('races')">Corridas</button>
+    <button class="nav-tab" onclick="showPage('wins')">Histórico</button>
+  </div>
+  <button class="nav-admin-btn" id="adminNavBtn" onclick="handleAdminClick()">⚙ Admin</button>
+</nav>
+
+<!-- HOME -->
+<div class="page active" id="page-home">
+  <div id="liveBanner" class="live-banner" style="display:none">
+    <div class="live-dot"></div>
+    <div class="live-text" id="liveTicker">A carregar dados ao vivo...</div>
+  </div>
+  <div class="section-header">
+    <div class="section-title">Classificação</div>
+    <div class="section-badge live" id="rankStatusBadge">Provisória</div>
+  </div>
+  <div class="card" id="rankingCard">
+    <div class="empty-state"><div class="empty-icon">🚴</div><p>Nenhuma corrida ativa.<br>Aguarda o administrador criar uma corrida.</p></div>
+  </div>
+</div>
+
+<!-- RACES -->
+<div class="page" id="page-races">
+  <div class="section-header"><div class="section-title">Corridas</div></div>
+  <div id="racesContainer"><div class="empty-state"><div class="empty-icon">🏆</div><p>Nenhuma corrida registada ainda.</p></div></div>
+</div>
+
+<!-- WINS -->
+<div class="page" id="page-wins">
+  <div class="section-header"><div class="section-title">Histórico de Vitórias</div></div>
+  <div class="stats-grid" id="winsStats"></div>
+  <div class="wins-grid" id="winsGrid"><div class="empty-state" style="grid-column:1/-1"><div class="empty-icon">🥇</div><p>Ainda não há vitórias registadas.</p></div></div>
+</div>
+
+<!-- ADMIN -->
+<div class="page" id="page-admin">
+  <div class="section-header">
+    <div class="section-title">Painel Admin</div>
+    <button class="btn secondary sm" onclick="logoutAdmin()">Sair</button>
+  </div>
+
+  <div class="admin-grid">
+
+    <div class="card">
+      <h3 style="font-family:var(--font-display);font-size:20px;margin-bottom:1rem;color:var(--c-accent)">Jogadores</h3>
+      <div class="form-group"><label>Nome do jogador</label><input type="text" id="newPlayerName" placeholder="Ex: Pedro Alves"></div>
+      <div class="form-group">
+        <label>Cor</label>
+        <select id="newPlayerColor">
+          <option value="gold">Dourado</option><option value="blue">Azul</option>
+          <option value="red">Vermelho</option><option value="green">Verde</option><option value="purple">Roxo</option>
+        </select>
+      </div>
+      <button class="btn" onclick="addPlayer()">Adicionar Jogador</button>
+      <div style="margin-top:1rem" id="playersList"></div>
+    </div>
+
+    <div class="card">
+      <h3 style="font-family:var(--font-display);font-size:20px;margin-bottom:1rem;color:var(--c-accent)">Corridas</h3>
+      <div class="form-group"><label>Nome da corrida</label><input type="text" id="newRaceName" placeholder="Ex: Tour de France 2025"></div>
+      <div class="form-group"><label>Ano</label><input type="number" id="newRaceYear" value="2025" min="2000" max="2100"></div>
+      <div class="form-group">
+        <label>PCS Race ID</label>
+        <input type="text" id="newRacePcsId" placeholder="Ex: tour-de-france/2025">
+        <small style="color:var(--c-text2);font-size:11px;margin-top:4px;display:block">procyclingstats.com/race/<strong>ESTE-ID</strong></small>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" onclick="createRace()">Criar Corrida</button>
+      </div>
+      <div style="margin-top:1.5rem"><label>Corridas</label><div id="adminRacesList" style="margin-top:0.5rem"></div></div>
+    </div>
+
+    <div class="card">
+      <h3 style="font-family:var(--font-display);font-size:20px;margin-bottom:1rem;color:var(--c-accent)">Startlist</h3>
+      <div class="tab-bar" style="margin-bottom:1rem">
+        <button class="tab-pill active" onclick="switchStartlistTab('manual',this)">Manual</button>
+        <button class="tab-pill" onclick="switchStartlistTab('api',this)">API (PCS)</button>
+      </div>
+
+      <div id="startlist-tab-manual">
+        <div class="form-group"><label>Corrida</label><select id="startlistRaceManual"></select></div>
+        <div class="form-group">
+          <label>Ciclistas (um por linha: Nome, Equipa)</label>
+          <textarea id="manualCyclists" rows="8" placeholder="Tadej Pogačar, UAE Team Emirates&#10;Jonas Vingegaard, Visma-Lease a Bike&#10;Remco Evenepoel, Soudal Quick-Step"></textarea>
+        </div>
+        <button class="btn" onclick="importManualStartlist()">Importar Lista</button>
+      </div>
+
+      <div id="startlist-tab-api" style="display:none">
+        <div class="form-group"><label>Corrida</label><select id="startlistRaceApi"></select></div>
+        <div class="api-status" id="apiStatus">
+          <div class="api-dot" id="apiDot"></div>
+          <span id="apiStatusText">Clica para testar a ligação ao servidor</span>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn secondary sm" onclick="checkApiHealth()">Testar Servidor</button>
+          <button class="btn sm" onclick="fetchStartlistApi()">Buscar Startlist</button>
+        </div>
+        <small style="color:var(--c-text2);font-size:11px;display:block;margin-top:0.75rem">Requer o servidor proxy a correr localmente ou online.</small>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="font-family:var(--font-display);font-size:20px;margin-bottom:1rem;color:var(--c-accent)">Apostas / Top-20</h3>
+      <div class="form-group"><label>Corrida</label><select id="picksRace" onchange="loadPicksEditor()"></select></div>
+      <div class="form-group"><label>Jogador</label><select id="picksPlayer" onchange="loadPicksEditor()"></select></div>
+      <div id="picksEditorContainer" style="display:none">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
+          <div>
+            <label style="margin-bottom:0.5rem">Top-10 apostado</label>
+            <p class="drag-hint">Clica nos ciclistas abaixo</p>
+            <div class="pick-slot-list" id="top10SlotList"></div>
+          </div>
+          <div>
+            <label style="margin-bottom:0.5rem">Posições 11–20</label>
+            <p class="drag-hint">Continua a clicar</p>
+            <div class="pick-slot-list" id="top20SlotList"></div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.75rem;margin-bottom:1rem">
+          <div class="form-group"><label>🟡 Camisola Pontos</label><select id="jerseyPoints"><option value="">—</option></select></div>
+          <div class="form-group"><label>🔴 Camisola Montanha</label><select id="jerseyMountain"><option value="">—</option></select></div>
+          <div class="form-group"><label>🔵 Camisola Juventude</label><select id="jerseyYouth"><option value="">—</option></select></div>
+        </div>
+        <label style="margin-bottom:0.5rem">Startlist</label>
+        <input type="text" id="cyclistSearch" placeholder="Pesquisar ciclista..." oninput="filterCyclists()" style="margin-bottom:0.75rem">
+        <div class="top20-grid" id="cyclistPickGrid"></div>
+        <div style="margin-top:1rem;display:flex;gap:8px">
+          <button class="btn" onclick="savePicks()">Guardar Apostas</button>
+          <button class="btn secondary" onclick="clearPicks()">Limpar</button>
+        </div>
+      </div>
+      <div id="picksEditorEmpty" style="color:var(--c-text2);font-size:13px">Seleciona uma corrida e um jogador.</div>
+    </div>
+
+    <div class="card" style="grid-column:1/-1">
+      <h3 style="font-family:var(--font-display);font-size:20px;margin-bottom:1rem;color:var(--c-accent)">Resultados da Corrida</h3>
+      <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:1rem">
+        <div class="form-group" style="margin:0;flex:1;min-width:180px">
+          <label>Corrida</label>
+          <select id="resultRace" onchange="loadResultEditor()"></select>
+        </div>
+        <button class="btn secondary" id="fetchLiveBtn" onclick="fetchLiveResultsForSelected()">🔄 Buscar Ao Vivo (PCS)</button>
+        <button class="btn" onclick="markRaceComplete()" id="markCompleteBtn" style="display:none">✓ Marcar como Concluída</button>
+      </div>
+      <div id="resultEditorContainer">
+        <div class="empty-state"><div class="empty-icon">📊</div><p>Seleciona uma corrida.</p></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── CONFIG ──────────────────────────────────
+// Em produção muda para o teu URL (ex: https://veloaposta.onrender.com)
+const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? `http://localhost:3000`
+  : window.location.origin;
+
+const ADMIN_PASS = 'Prozis12345';
+let isAdmin = false;
+
+// ── DB ──────────────────────────────────────
+function getDB() {
+  const raw = localStorage.getItem('veloaposta_db');
+  if (!raw) return { players: [], races: [] };
+  return JSON.parse(raw);
+}
+function saveDB(db) { localStorage.setItem('veloaposta_db', JSON.stringify(db)); }
+
+// ── NAV ─────────────────────────────────────
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  const map = ['home','races','wins'];
+  const idx = map.indexOf(name);
+  if (idx >= 0) document.querySelectorAll('.nav-tab')[idx].classList.add('active');
+  if (name === 'home') renderRanking();
+  if (name === 'races') renderRaces();
+  if (name === 'wins') renderWins();
+  if (name === 'admin') renderAdmin();
+}
+
+function handleAdminClick() {
+  if (isAdmin) { showPage('admin'); return; }
+  document.getElementById('adminOverlay').classList.remove('hidden');
+  setTimeout(() => document.getElementById('adminPassInput').focus(), 100);
+}
+function closeAdminOverlay() {
+  document.getElementById('adminOverlay').classList.add('hidden');
+  document.getElementById('adminPassInput').value = '';
+  document.getElementById('loginError').classList.add('hidden');
+}
+function tryAdminLogin() {
+  if (document.getElementById('adminPassInput').value === ADMIN_PASS) {
+    isAdmin = true; closeAdminOverlay(); showPage('admin');
+  } else {
+    document.getElementById('loginError').classList.remove('hidden');
+  }
+}
+document.getElementById('adminPassInput').addEventListener('keydown', e => { if (e.key==='Enter') tryAdminLogin(); });
+function logoutAdmin() { isAdmin = false; showPage('home'); }
+
+// ── SCORING ─────────────────────────────────
+function calculateScore(picks, actualTop20, actualJerseys) {
+  if (!picks || !actualTop20 || actualTop20.length === 0) return { pts:0, exactSpots:0, correctTop10:0, correctTop20:0, jerseyHits:0 };
+  const playerTop10 = (picks.top10||[]).map(c=>c.name);
+  const playerTop20 = (picks.top20||[]).map(c=>c.name);
+  const actualTop10 = actualTop20.slice(0,10).map(c=>c.name);
+  const actualTop20Names = actualTop20.map(c=>c.name);
+  let pts=0, exactSpots=0, correctTop10=0, correctTop20=0, jerseyHits=0;
+
+  playerTop10.forEach((name,i) => {
+    if (actualTop10[i] === name) { pts+=3; exactSpots++; correctTop10++; }
+    else if (actualTop10.includes(name)) { pts+=3; correctTop10++; }
+  });
+  playerTop20.forEach(name => {
+    const pos = actualTop20Names.indexOf(name);
+    if (pos >= 10) { pts+=2; correctTop20++; }
+    else if (pos >= 0) { pts+=1; } // estava no top-10
+  });
+
+  const jerseys = picks.jerseys || {};
+  const aj = actualJerseys || {};
+  if (jerseys.points && jerseys.points===aj.points) { pts+=1; jerseyHits++; }
+  if (jerseys.mountain && jerseys.mountain===aj.mountain) { pts+=1; jerseyHits++; }
+  if (jerseys.youth && jerseys.youth===aj.youth) { pts+=1; jerseyHits++; }
+
+  return { pts, exactSpots, correctTop10, correctTop20, jerseyHits };
+}
+
+function rankPlayers(race) {
+  const db = getDB();
+  const results = [];
+  db.players.forEach(player => {
+    const picks = (race.picks||{})[player.id];
+    if (!picks) return;
+    const score = calculateScore(picks, race.currentTop20||[], race.actualJerseys||{});
+    results.push({ player, score });
+  });
+  results.sort((a,b) => {
+    if (b.score.pts!==a.score.pts) return b.score.pts-a.score.pts;
+    if (b.score.exactSpots!==a.score.exactSpots) return b.score.exactSpots-a.score.exactSpots;
+    if (b.score.correctTop10!==a.score.correctTop10) return b.score.correctTop10-a.score.correctTop10;
+    if (b.score.correctTop20!==a.score.correctTop20) return b.score.correctTop20-a.score.correctTop20;
+    return b.score.jerseyHits-a.score.jerseyHits;
+  });
+  return results;
+}
+
+// ── RENDER HOME ──────────────────────────────
+function renderRanking() {
+  const db = getDB();
+  const activeRace = db.races.find(r=>r.active) || db.races[db.races.length-1];
+  const container = document.getElementById('rankingCard');
+  const banner = document.getElementById('liveBanner');
+  const badge = document.getElementById('rankStatusBadge');
+
+  if (!activeRace) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">🚴</div><p>Nenhuma corrida ativa.</p></div>`;
+    banner.style.display='none'; return;
+  }
+
+  badge.textContent = activeRace.completed ? 'Final' : 'Provisória';
+  badge.className = 'section-badge' + (activeRace.active && !activeRace.completed ? ' live' : '');
+
+  if (activeRace.active && !activeRace.completed && (activeRace.currentTop20||[]).length > 0) {
+    banner.style.display='flex';
+    const l = activeRace.currentTop20[0];
+    document.getElementById('liveTicker').innerHTML = `<strong>${activeRace.name}</strong> — Líder: <strong>${l.name}</strong> (${l.team||''})`;
+  } else { banner.style.display='none'; }
+
+  const ranked = rankPlayers(activeRace);
+  if (ranked.length===0) {
+    container.innerHTML=`<div class="empty-state"><div class="empty-icon">⏳</div><p>Aguarda que os jogadores façam as suas apostas.</p></div>`;
+    return;
+  }
+
+  const posCls=['gold','silver','bronze'];
+  container.innerHTML=`<table class="rank-table">
+    <thead><tr><th>#</th><th>Jogador</th><th style="text-align:right">Pontos</th></tr></thead>
+    <tbody>${ranked.map((r,i)=>{
+      const picks=(activeRace.picks||{})[r.player.id]||{};
+      const jerseys=picks.jerseys||{};
+      const aj=activeRace.actualJerseys||{};
+      const jerseyHtml=`<div class="jersey-row">
+        ${jerseys.points?`<span class="jersey points ${jerseys.points===aj.points?'hit':'miss'}">🟡 ${jerseys.points}</span>`:''}
+        ${jerseys.mountain?`<span class="jersey mountain ${jerseys.mountain===aj.mountain?'hit':'miss'}">🔴 ${jerseys.mountain}</span>`:''}
+        ${jerseys.youth?`<span class="jersey youth ${jerseys.youth===aj.youth?'hit':'miss'}">🔵 ${jerseys.youth}</span>`:''}
+      </div>`;
+      return `<tr>
+        <td><span class="rank-pos ${posCls[i]||''}">${i+1}</span></td>
+        <td><div class="rank-name">${r.player.name}</div>
+        <div class="rank-detail">exatos: ${r.score.exactSpots} · top-10: ${r.score.correctTop10} · top-20: ${r.score.correctTop20} · camisolas: ${r.score.jerseyHits}</div>
+        ${jerseyHtml}</td>
+        <td><div class="rank-pts">${r.score.pts}</div></td>
+      </tr>`;
+    }).join('')}</tbody></table>`;
+}
+
+// ── RENDER RACES ─────────────────────────────
+function renderRaces() {
+  const db = getDB();
+  const container = document.getElementById('racesContainer');
+  if (db.races.length===0) { container.innerHTML=`<div class="empty-state"><div class="empty-icon">🏆</div><p>Nenhuma corrida registada.</p></div>`; return; }
+  container.innerHTML=db.races.slice().reverse().map(race=>{
+    const ranked=rankPlayers(race);
+    const status=race.completed?'completed':'live';
+    const statusText=race.completed?'Concluída':'Em curso';
+    const top20Html=(race.currentTop20||[]).slice(0,20).map((c,i)=>`
+      <div class="podium-row"><div class="podium-pos">${i+1}</div><div class="podium-name">${c.name}</div><div class="podium-team">${c.team||''}</div><div class="podium-time">${c.time||''}</div></div>`).join('');
+    const compareHtml=buildCompareCards(race,ranked);
+    return `<div class="race-card">
+      <div class="race-header" onclick="toggleRaceCard('${race.id}')">
+        <div><h3>${race.name}</h3><div style="font-size:12px;color:var(--c-text2)">${race.year}</div></div>
+        <div style="display:flex;align-items:center;gap:0.75rem"><span class="race-status ${status}">${statusText}</span><span class="chevron" id="chev-${race.id}">▼</span></div>
+      </div>
+      <div class="race-body" id="rbody-${race.id}">
+        <div class="grid-2" style="margin-top:1rem">
+          <div><h4 style="font-size:13px;font-weight:600;color:var(--c-text2);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:0.75rem">Classificação do Jogo</h4>
+          ${ranked.length===0?'<p style="color:var(--c-text2);font-size:13px">Sem apostas.</p>':`<table class="rank-table"><thead><tr><th>#</th><th>Jogador</th><th style="text-align:right">Pts</th></tr></thead><tbody>${ranked.map((r,i)=>`<tr><td><span class="rank-pos ${['gold','silver','bronze'][i]||''}">${i+1}</span></td><td>${r.player.name}</td><td class="rank-pts">${r.score.pts}</td></tr>`).join('')}</tbody></table>`}</div>
+          <div><h4 style="font-size:13px;font-weight:600;color:var(--c-text2);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:0.75rem">Resultado Real — Top 20</h4>
+          ${top20Html||'<p style="color:var(--c-text2);font-size:13px">Sem resultados disponíveis.</p>'}</div>
+        </div>
+        ${compareHtml?`<div style="margin-top:1.5rem"><h4 style="font-size:13px;font-weight:600;color:var(--c-text2);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:0.75rem">Apostas dos Jogadores</h4>${compareHtml}</div>`:''}
+      </div></div>`;
+  }).join('');
+}
+
+function buildCompareCards(race,ranked) {
+  if (!ranked.length) return '';
+  const actual=(race.currentTop20||[]).map(c=>c.name);
+  const actualTop10=actual.slice(0,10);
+  return `<div class="compare-grid">${ranked.map(r=>{
+    const picks=(race.picks||{})[r.player.id];
+    if (!picks) return '';
+    const allPicks=[...(picks.top10||[]),...(picks.top20||[])];
+    return `<div class="compare-card">
+      <div class="compare-card-header"><div class="compare-card-name">${r.player.name}</div><div class="compare-card-pts">${r.score.pts}pts</div></div>
+      ${allPicks.map((c,i)=>{
+        const ai=actual.indexOf(c.name);
+        let bc='miss',bt='Fora';
+        if(ai>=0&&ai<10){bc='correct';bt=`#${ai+1}`;}
+        else if(ai>=10){bc='close';bt=`#${ai+1}`;}
+        return `<div class="compare-pick-row"><div class="cpr-pos">${i+1}</div><div class="cpr-name">${c.name}</div><div class="cpr-badge ${bc}">${bt}</div></div>`;
+      }).join('')}
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function toggleRaceCard(id) {
+  document.getElementById('rbody-'+id).classList.toggle('open');
+  document.getElementById('chev-'+id).classList.toggle('open');
+}
+
+// ── RENDER WINS ──────────────────────────────
+function renderWins() {
+  const db=getDB();
+  const winsMap={};
+  db.players.forEach(p=>{winsMap[p.id]={player:p,wins:0,totalPts:0};});
+  db.races.filter(r=>r.completed).forEach(race=>{
+    const ranked=rankPlayers(race);
+    if(ranked.length>0&&winsMap[ranked[0].player.id]) winsMap[ranked[0].player.id].wins++;
+    ranked.forEach(r=>{if(winsMap[r.player.id]) winsMap[r.player.id].totalPts+=r.score.pts;});
+  });
+  const entries=Object.values(winsMap).sort((a,b)=>b.wins-a.wins||b.totalPts-a.totalPts);
+  const totalRaces=db.races.filter(r=>r.completed).length;
+  document.getElementById('winsStats').innerHTML=`
+    <div class="stat-card"><span class="stat-val">${db.players.length}</span><span class="stat-lbl">Jogadores</span></div>
+    <div class="stat-card"><span class="stat-val">${totalRaces}</span><span class="stat-lbl">Corridas</span></div>
+    <div class="stat-card"><span class="stat-val">${entries[0]?.player.name.split(' ')[0]||'—'}</span><span class="stat-lbl">Mais vitórias</span></div>`;
+  const colors={gold:'#e8c84a',blue:'#4a8fe8',red:'#e24b4a',green:'#3dba7e',purple:'#9b7fe8'};
+  document.getElementById('winsGrid').innerHTML=entries.length===0
+    ?`<div class="empty-state" style="grid-column:1/-1"><div class="empty-icon">🥇</div><p>Ainda não há vitórias.</p></div>`
+    :entries.map(e=>{
+      const c=colors[e.player.color]||'#e8c84a';
+      const ini=e.player.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase();
+      return `<div class="win-card"><div class="win-avatar" style="background:${c}22;color:${c}">${ini}</div><div class="win-name">${e.player.name}</div><div class="win-count" style="color:${c}">${e.wins}</div><div class="win-lbl">vitória${e.wins!==1?'s':''} · ${e.totalPts} pts totais</div></div>`;
+    }).join('');
+}
+
+// ── ADMIN RENDER ─────────────────────────────
+function renderAdmin() {
+  const db=getDB();
+  const el=document.getElementById('playersList');
+  el.innerHTML=db.players.length===0?'<p style="color:var(--c-text2);font-size:13px">Sem jogadores.</p>'
+    :db.players.map(p=>`<div class="player-pill"><span class="player-pill-name">${p.name}</span><button class="btn danger sm" onclick="deletePlayer('${p.id}')">Remover</button></div>`).join('');
+  const rl=document.getElementById('adminRacesList');
+  rl.innerHTML=db.races.length===0?'<p style="color:var(--c-text2);font-size:13px">Sem corridas.</p>'
+    :db.races.map(r=>`<div class="player-pill"><span class="player-pill-name">${r.name} <span style="color:var(--c-text2);font-size:11px">${r.completed?'(Concluída)':r.active?'(Ativa)':''}</span></span><div style="display:flex;gap:6px">${!r.active&&!r.completed?`<button class="btn secondary sm" onclick="setActiveRace('${r.id}')">Ativar</button>`:''}<button class="btn danger sm" onclick="deleteRace('${r.id}')">✕</button></div></div>`).join('');
+  const ids=['startlistRaceManual','startlistRaceApi','picksRace','resultRace'];
+  ids.forEach(id=>{
+    const el2=document.getElementById(id);
+    if(!el2) return;
+    el2.innerHTML='<option value="">— Selecionar corrida —</option>'+db.races.map(r=>`<option value="${r.id}">${r.name} ${r.year}</option>`).join('');
+  });
+  const pp=document.getElementById('picksPlayer');
+  pp.innerHTML='<option value="">— Selecionar jogador —</option>'+db.players.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+}
+
+// ── ADMIN ACTIONS ────────────────────────────
+function addPlayer() {
+  const name=document.getElementById('newPlayerName').value.trim();
+  const color=document.getElementById('newPlayerColor').value;
+  if(!name){showToast('Introduz um nome.',true);return;}
+  const db=getDB();
+  db.players.push({id:'p_'+Date.now(),name,color});
+  saveDB(db); document.getElementById('newPlayerName').value='';
+  renderAdmin(); showToast(`Jogador "${name}" adicionado!`);
+}
+function deletePlayer(id) {
+  if(!confirm('Remover este jogador?')) return;
+  const db=getDB(); db.players=db.players.filter(p=>p.id!==id);
+  saveDB(db); renderAdmin(); showToast('Jogador removido.');
+}
+function createRace() {
+  const name=document.getElementById('newRaceName').value.trim();
+  const year=parseInt(document.getElementById('newRaceYear').value);
+  const pcsId=document.getElementById('newRacePcsId').value.trim();
+  if(!name){showToast('Introduz um nome.',true);return;}
+  const db=getDB();
+  db.races.push({id:'r_'+Date.now(),name,year,pcsId,active:false,completed:false,startlist:[],picks:{},currentTop20:[],actualJerseys:{}});
+  saveDB(db); renderAdmin(); showToast(`Corrida "${name}" criada!`);
+  document.getElementById('newRaceName').value='';
+}
+function setActiveRace(id) {
+  const db=getDB(); db.races.forEach(r=>{r.active=r.id===id;});
+  saveDB(db); renderAdmin(); showToast('Corrida ativada!');
+}
+function deleteRace(id) {
+  if(!confirm('Apagar esta corrida?')) return;
+  const db=getDB(); db.races=db.races.filter(r=>r.id!==id);
+  saveDB(db); renderAdmin(); showToast('Corrida apagada.');
+}
+
+// ── STARTLIST ────────────────────────────────
+function switchStartlistTab(tab,btn) {
+  ['manual','api'].forEach(t=>{ document.getElementById('startlist-tab-'+t).style.display=t===tab?'block':'none'; });
+  document.querySelectorAll('#page-admin .tab-pill').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function importManualStartlist() {
+  const raceId=document.getElementById('startlistRaceManual').value;
+  const raw=document.getElementById('manualCyclists').value.trim();
+  if(!raceId){showToast('Seleciona uma corrida.',true);return;}
+  if(!raw){showToast('Introduz a lista.',true);return;}
+  const db=getDB();
+  const race=db.races.find(r=>r.id===raceId);
+  if(!race) return;
+  race.startlist=raw.split('\n').filter(l=>l.trim()).map((line,i)=>{
+    const parts=line.split(',');
+    return {id:'c_'+i,name:parts[0].trim(),team:parts[1]?.trim()||''};
+  });
+  saveDB(db); document.getElementById('manualCyclists').value='';
+  showToast(`${race.startlist.length} ciclistas importados!`);
+}
+
+async function checkApiHealth() {
+  const dot=document.getElementById('apiDot');
+  const txt=document.getElementById('apiStatusText');
+  dot.className='api-dot'; txt.textContent='A testar...';
+  try {
+    const r=await fetch(`${API_BASE}/api/health`);
+    if(r.ok) { dot.className='api-dot ok'; txt.textContent='Servidor online e pronto'; }
+    else { dot.className='api-dot err'; txt.textContent='Servidor respondeu com erro'; }
+  } catch(e) {
+    dot.className='api-dot err'; txt.textContent='Servidor não encontrado — está a correr?';
+  }
+}
+
+async function fetchStartlistApi() {
+  const raceId=document.getElementById('startlistRaceApi').value;
+  if(!raceId){showToast('Seleciona uma corrida.',true);return;}
+  const db=getDB();
+  const race=db.races.find(r=>r.id===raceId);
+  if(!race?.pcsId){showToast('Define o PCS Race ID na corrida.',true);return;}
+  const dot=document.getElementById('apiDot');
+  const txt=document.getElementById('apiStatusText');
+  dot.className='api-dot'; txt.textContent='A buscar startlist...';
+  try {
+    const r=await fetch(`${API_BASE}/api/startlist?race=${encodeURIComponent(race.pcsId)}`);
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Erro desconhecido');
+    race.startlist=data.cyclists;
+    saveDB(db);
+    dot.className='api-dot ok'; txt.textContent=`${data.count} ciclistas importados!`;
+    showToast(`${data.count} ciclistas importados com sucesso!`);
+  } catch(e) {
+    dot.className='api-dot err'; txt.textContent='Erro: '+e.message;
+    showToast('Erro ao buscar startlist: '+e.message,true);
+  }
+}
+
+// ── PICKS EDITOR ─────────────────────────────
+let currentPicks={top10:Array(10).fill(null),top20:Array(10).fill(null),jerseys:{}};
+
+function loadPicksEditor() {
+  const raceId=document.getElementById('picksRace').value;
+  const playerId=document.getElementById('picksPlayer').value;
+  const container=document.getElementById('picksEditorContainer');
+  const empty=document.getElementById('picksEditorEmpty');
+  if(!raceId||!playerId){container.style.display='none';empty.style.display='block';return;}
+  const db=getDB();
+  const race=db.races.find(r=>r.id===raceId);
+  if(!race) return;
+  container.style.display='block'; empty.style.display='none';
+  const saved=(race.picks||{})[playerId]||{};
+  const t10=saved.top10||[];
+  const t20=saved.top20||[];
+  currentPicks={
+    top10:[...t10,...Array(Math.max(0,10-t10.length)).fill(null)].slice(0,10),
+    top20:[...t20,...Array(Math.max(0,10-t20.length)).fill(null)].slice(0,10),
+    jerseys:saved.jerseys||{}
+  };
+  const cyclists=race.startlist||[];
+  const opts='<option value="">—</option>'+cyclists.map(c=>`<option value="${c.name}">${c.name}</option>`).join('');
+  ['jerseyPoints','jerseyMountain','jerseyYouth'].forEach(id=>{document.getElementById(id).innerHTML=opts;});
+  if(currentPicks.jerseys.points) document.getElementById('jerseyPoints').value=currentPicks.jerseys.points;
+  if(currentPicks.jerseys.mountain) document.getElementById('jerseyMountain').value=currentPicks.jerseys.mountain;
+  if(currentPicks.jerseys.youth) document.getElementById('jerseyYouth').value=currentPicks.jerseys.youth;
+  renderPickSlots(); renderCyclistGrid(cyclists);
+}
+
+function renderPickSlots() {
+  document.getElementById('top10SlotList').innerHTML=currentPicks.top10.map((c,i)=>`
+    <div class="pick-slot ${c?'filled':''}"><span>${i+1}. ${c?c.name:'<span style="color:var(--c-text2)">—</span>'}</span>${c?`<span class="remove-pick" onclick="removePick('top10',${i})">×</span>`:''}</div>`).join('');
+  document.getElementById('top20SlotList').innerHTML=currentPicks.top20.map((c,i)=>`
+    <div class="pick-slot ${c?'filled':''}"><span>${i+11}. ${c?c.name:'<span style="color:var(--c-text2)">—</span>'}</span>${c?`<span class="remove-pick" onclick="removePick('top20',${i})">×</span>`:''}</div>`).join('');
+}
+
+function renderCyclistGrid(cyclists) {
+  const q=document.getElementById('cyclistSearch').value.toLowerCase();
+  const filtered=cyclists.filter(c=>!q||c.name.toLowerCase().includes(q)||(c.team||'').toLowerCase().includes(q));
+  document.getElementById('cyclistPickGrid').innerHTML=filtered.map(c=>{
+    const i10=currentPicks.top10.findIndex(p=>p&&p.name===c.name);
+    const i20=currentPicks.top20.findIndex(p=>p&&p.name===c.name);
+    const cls=i10>=0?'selected-top10':i20>=0?'selected-top20':'';
+    const nc=i10>=0?'top10':i20>=0?'top20':'';
+    const nv=i10>=0?i10+1:i20>=0?i20+11:'';
+    return `<div class="cyclist-pick ${cls}" onclick="toggleCyclistPick('${c.name.replace(/'/g,"\\'")}','${(c.team||'').replace(/'/g,"\\'")}')">
+      <div class="pick-num ${nc}">${nv}</div>
+      <div><div style="font-weight:500">${c.name}</div><div style="font-size:11px;color:var(--c-text2)">${c.team||''}</div></div>
+    </div>`;
+  }).join('');
+}
+
+function filterCyclists() {
+  const raceId=document.getElementById('picksRace').value;
+  const db=getDB();
+  const race=db.races.find(r=>r.id===raceId);
+  renderCyclistGrid(race?.startlist||[]);
+}
+
+function toggleCyclistPick(name,team) {
+  const i10=currentPicks.top10.findIndex(p=>p&&p.name===name);
+  const i20=currentPicks.top20.findIndex(p=>p&&p.name===name);
+  const raceId=document.getElementById('picksRace').value;
+  const db=getDB();
+  const race=db.races.find(r=>r.id===raceId);
+  if(i10>=0){currentPicks.top10[i10]=null;}
+  else if(i20>=0){currentPicks.top20[i20]=null;}
+  else {
+    const e10=currentPicks.top10.findIndex(p=>!p);
+    if(e10>=0){currentPicks.top10[e10]={name,team};}
+    else {
+      const e20=currentPicks.top20.findIndex(p=>!p);
+      if(e20>=0){currentPicks.top20[e20]={name,team};}
+      else{showToast('Top-20 já completo!',true);return;}
+    }
+  }
+  renderPickSlots(); renderCyclistGrid(race?.startlist||[]);
+}
+
+function removePick(list,idx) {
+  currentPicks[list][idx]=null;
+  const raceId=document.getElementById('picksRace').value;
+  const db=getDB();
+  const race=db.races.find(r=>r.id===raceId);
+  renderPickSlots(); renderCyclistGrid(race?.startlist||[]);
+}
+
+function savePicks() {
+  const raceId=document.getElementById('picksRace').value;
+  const playerId=document.getElementById('picksPlayer').value;
+  if(!raceId||!playerId){showToast('Seleciona corrida e jogador.',true);return;}
+  const db=getDB();
+  const race=db.races.find(r=>r.id===raceId);
+  if(!race) return;
+  if(!race.picks) race.picks={};
+  race.picks[playerId]={
+    top10:currentPicks.top10.filter(Boolean),
+    top20:currentPicks.top20.filter(Boolean),
+    jerseys:{
+      points:document.getElementById('jerseyPoints').value,
+      mountain:document.getElementById('jerseyMountain').value,
+      youth:document.getElementById('jerseyYouth').value,
+    }
+  };
+  saveDB(db); showToast('Apostas guardadas!');
+}
+
+function clearPicks() {
+  currentPicks={top10:Array(10).fill(null),top20:Array(10).fill(null),jerseys:{}};
+  renderPickSlots();
+  const raceId=document.getElementById('picksRace').value;
+  const db=getDB();
+  const race=db.races.find(r=>r.id===raceId);
+  renderCyclistGrid(race?.startlist||[]);
+}
+
+// ── RESULTS ──────────────────────────────────
+function loadResultEditor() {
+  const raceId=document.getElementById('resultRace').value;
+  const container=document.getElementById('resultEditorContainer');
+  if(!raceId){container.innerHTML=`<div class="empty-state"><div class="empty-icon">📊</div><p>Seleciona uma corrida.</p></div>`;document.getElementById('markCompleteBtn').style.display='none';return;}
+  const db=getDB();
+  const race=db.races.find(r=>r.id===raceId);
+  if(!race) return;
+  document.getElementById('markCompleteBtn').style.display=race.completed?'none':'inline-flex';
+  const slots=Array.from({length:20},(_,i)=>{
+    const c=(race.currentTop20||[])[i]||{};
+    return `<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+      <span style="font-family:var(--font-display);font-size:16px;color:var(--c-text2);width:28px;flex-shrink:0">${i+1}</span>
+      <input type="text" placeholder="Nome" value="${c.name||''}" id="res_name_${i}" style="flex:1">
+      <input type="text" placeholder="Equipa" value="${c.team||''}" id="res_team_${i}" style="flex:1">
+      <input type="text" placeholder="Tempo" value="${c.time||''}" id="res_time_${i}" style="width:90px">
+    </div>`;
+  }).join('');
+  const jerseys=race.actualJerseys||{};
+  const cyclists=race.startlist||[];
+  const jerseyOpts='<option value="">—</option>'+cyclists.map(c=>`<option value="${c.name}">${c.name}</option>`).join('');
+  container.innerHTML=`
+    <div class="grid-2" style="margin-bottom:1rem">
+      <div><label>🟡 Camisola Pontos</label><select id="actualJerseyPoints">${jerseyOpts}</select></div>
+      <div><label>🔴 Camisola Montanha</label><select id="actualJerseyMountain">${jerseyOpts}</select></div>
+      <div><label>🔵 Camisola Juventude</label><select id="actualJerseyYouth">${jerseyOpts}</select></div>
+    </div>
+    <div style="max-height:500px;overflow-y:auto;padding-right:4px">${slots}</div>
+    <div style="display:flex;gap:8px;margin-top:1rem;flex-wrap:wrap">
+      <button class="btn" onclick="saveResults('${raceId}')">Guardar Resultados</button>
+    </div>`;
+  if(jerseys.points) document.getElementById('actualJerseyPoints').value=jerseys.points;
+  if(jerseys.mountain) document.getElementById('actualJerseyMountain').value=jerseys.mountain;
+  if(jerseys.youth) document.getElementById('actualJerseyYouth').value=jerseys.youth;
+}
+
+function saveResults(raceId) {
+  const db=getDB();
+  const race=db.races.find(r=>r.id===raceId);
+  if(!race) return;
+  race.currentTop20=Array.from({length:20},(_,i)=>({
+    name:document.getElementById(`res_name_${i}`)?.value.trim()||'',
+    team:document.getElementById(`res_team_${i}`)?.value.trim()||'',
+    time:document.getElementById(`res_time_${i}`)?.value.trim()||'',
+  })).filter(c=>c.name);
+  race.actualJerseys={
+    points:document.getElementById('actualJerseyPoints')?.value||'',
+    mountain:document.getElementById('actualJerseyMountain')?.value||'',
+    youth:document.getElementById('actualJerseyYouth')?.value||'',
+  };
+  saveDB(db); showToast('Resultados guardados!'); renderRanking();
+}
+
+async function fetchLiveResultsForSelected() {
+  const raceId=document.getElementById('resultRace').value;
+  if(!raceId){showToast('Seleciona uma corrida.',true);return;}
+  const db=getDB();
+  const race=db.races.find(r=>r.id===raceId);
+  if(!race?.pcsId){showToast('Define o PCS Race ID na corrida.',true);return;}
+  const btn=document.getElementById('fetchLiveBtn');
+  btn.innerHTML='<span class="spinner"></span> A buscar...';
+  btn.disabled=true;
+  try {
+    const r=await fetch(`${API_BASE}/api/results?race=${encodeURIComponent(race.pcsId)}`);
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Erro');
+    race.currentTop20=data.top20;
+    if(data.jerseys) race.actualJerseys=data.jerseys;
+    saveDB(db);
+    loadResultEditor();
+    renderRanking();
+    showToast(`Top-20 atualizado! ${data.top20.length} posições.`);
+  } catch(e) {
+    showToast('Erro ao buscar resultados: '+e.message,true);
+  } finally {
+    btn.innerHTML='🔄 Buscar Ao Vivo (PCS)'; btn.disabled=false;
+  }
+}
+
+function markRaceComplete() {
+  const raceId=document.getElementById('resultRace').value;
+  if(!raceId) return;
+  if(!confirm('Marcar como concluída? Isto fixa a classificação final.')) return;
+  const db=getDB();
+  const race=db.races.find(r=>r.id===raceId);
+  if(!race) return;
+  race.completed=true; race.active=false;
+  saveDB(db); loadResultEditor(); showToast('Corrida marcada como concluída!');
+}
+
+// ── UTILS ────────────────────────────────────
+function showToast(msg,isErr=false) {
+  const t=document.getElementById('toast');
+  t.textContent=msg;
+  t.className='toast show'+(isErr?' error':'');
+  setTimeout(()=>t.className='toast',3500);
+}
+
+renderRanking();
+setInterval(()=>{
+  const db=getDB();
+  if(db.races.find(r=>r.active&&!r.completed)){
+    if(document.querySelector('.page.active')?.id==='page-home') renderRanking();
+  }
+},60000);
+</script>
+</body>
+</html>
