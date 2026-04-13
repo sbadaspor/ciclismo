@@ -1,6 +1,5 @@
-flask
-flask-cors
-requests
-gunicorn
-pandas
-first-cycling-api
+flask==3.1.0
+flask-cors==5.0.0
+requests==2.32.3
+beautifulsoup4==4.12.3
+gunicorn==23.0.0
