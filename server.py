@@ -283,8 +283,15 @@ def _find_latest_stage(race):
 
 
 def _clean_race(race):
-    """Remove sufixos de URL desnecessários."""
+    """Remove prefixos e sufixos desnecessários do Race ID."""
     race = race.strip()
+    # Remove URL completo se o user colou o link inteiro
+    if 'procyclingstats.com/race/' in race:
+        race = race.split('procyclingstats.com/race/')[-1]
+    # Remove prefixo "race/" se presente
+    if race.startswith('race/'):
+        race = race[len('race/'):]
+    # Remove sufixos de página
     for suffix in ['/startlist', '/overview', '/gc', '/result', '/route']:
         if race.endswith(suffix):
             race = race[:-len(suffix)]
