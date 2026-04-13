@@ -1,5 +1,5 @@
 flask==3.1.0
 flask-cors==5.0.0
-procyclingstats==0.2.8
-gunicorn==23.0.0
 cloudscraper==1.2.71
+beautifulsoup4==4.12.3
+gunicorn==23.0.0
