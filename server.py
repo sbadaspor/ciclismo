@@ -1,53 +1,33 @@
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 import os
-import requests
+import re
 import cloudscraper
+from bs4 import BeautifulSoup
 
 app = Flask(__name__, static_folder='public')
 CORS(app)
 
 # ──────────────────────────────────────────────
-#  Patch: substitui requests por cloudscraper
-#  para contornar a proteção Cloudflare do PCS
+#  Cloudscraper — contorna Cloudflare do PCS
 # ──────────────────────────────────────────────
 scraper = cloudscraper.create_scraper(
     browser={'browser': 'chrome', 'platform': 'windows', 'mobile': False}
 )
+PCS_BASE = "https://www.procyclingstats.com"
 
-try:
-    import procyclingstats.scraper as pcs_scraper_module
 
-    class CloudSession(requests.Session):
-        def get(self, url, **kwargs):
-            kwargs.pop('timeout', None)
-            return scraper.get(url, **kwargs)
-
-    class PatchedRequests:
-        Session           = CloudSession
-        RequestException  = requests.RequestException
-        exceptions        = requests.exceptions
-        HTTPError         = requests.HTTPError
-        ConnectionError   = requests.ConnectionError
-        Timeout           = requests.Timeout
-
-        @staticmethod
-        def get(url, **kwargs):
-            kwargs.pop('timeout', None)
-            return scraper.get(url, **kwargs)
-
-    pcs_scraper_module.requests = PatchedRequests()
-
-    from procyclingstats import RaceStartlist, Stage, Race
-    PCS_AVAILABLE = True
-    print("✅ procyclingstats + cloudscraper prontos")
-except Exception as e:
-    PCS_AVAILABLE = False
-    print(f"⚠ Erro ao inicializar procyclingstats: {e}")
+def pcs_get(path):
+    """Faz GET ao PCS e devolve BeautifulSoup."""
+    url = f"{PCS_BASE}/{path}"
+    print(f"  → GET {url}")
+    resp = scraper.get(url, timeout=20)
+    resp.raise_for_status()
+    return BeautifulSoup(resp.text, 'html.parser')
 
 
 # ──────────────────────────────────────────────
-#  Serve o frontend (index.html)
+#  Serve o frontend
 # ──────────────────────────────────────────────
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
@@ -62,12 +42,7 @@ def serve(path):
 # ──────────────────────────────────────────────
 @app.get('/api/health')
 def health():
-    return jsonify({
-        'status': 'ok',
-        'version': '3.2.0',
-        'engine': 'procyclingstats + cloudscraper',
-        'pcs_available': PCS_AVAILABLE
-    })
+    return jsonify({'status': 'ok', 'version': '4.0.0', 'engine': 'cloudscraper + bs4'})
 
 
 # ──────────────────────────────────────────────
@@ -76,32 +51,60 @@ def health():
 # ──────────────────────────────────────────────
 @app.get('/api/startlist')
 def get_startlist():
-    if not PCS_AVAILABLE:
-        return jsonify({'error': 'procyclingstats não disponível.'}), 500
-
-    race = request.args.get('race', '').strip()
+    race = _clean_race(request.args.get('race', ''))
     if not race:
-        return jsonify({'error': 'Parâmetro "race" obrigatório. Ex: paris-roubaix/2026'}), 400
-
-    for suffix in ['/startlist/startlist', '/startlist', '/overview', '/gc', '/result']:
-        if race.endswith(suffix):
-            race = race[:-len(suffix)]
-
+        return jsonify({'error': 'Parâmetro "race" obrigatório.'}), 400
     try:
-        sl = RaceStartlist(f"race/{race}/startlist")
-        raw = sl.startlist()
-
+        soup = pcs_get(f"race/{race}/startlist")
         cyclists = []
-        for r in raw:
-            name = r.get('rider_name', '')
-            name = ' '.join(w.capitalize() for w in name.split())
-            cyclists.append({
-                'id': r.get('rider_url', '').replace('rider/', ''),
-                'name': name,
-                'team': r.get('team_name', ''),
-                'nationality': r.get('nationality', ''),
-                'number': r.get('rider_number'),
-            })
+
+        # PCS startlist: lista de riders dentro de divs com classe "ridersCont"
+        # Cada rider tem um link <a href="/rider/...">NOME APELIDO</a>
+        # e a equipa está no elemento pai ou num span próximo
+        rider_links = soup.select('ul.startlist li a[href*="/rider/"]')
+
+        if not rider_links:
+            # Fallback: tabela
+            rows = soup.select('table.basic tbody tr')
+            for i, row in enumerate(rows):
+                name_el = row.select_one('a[href*="/rider/"]')
+                team_el = row.select_one('a[href*="/team/"]')
+                if not name_el:
+                    continue
+                cyclists.append({
+                    'id': f'c_{i}',
+                    'name': _title(name_el.text),
+                    'team': team_el.text.strip() if team_el else '',
+                    'nationality': '',
+                    'number': None,
+                })
+        else:
+            seen = set()
+            for i, a in enumerate(rider_links):
+                name = _title(a.text)
+                if not name or name in seen:
+                    continue
+                seen.add(name)
+                # Equipa: texto do li pai ou elemento vizinho
+                li = a.find_parent('li')
+                team = ''
+                if li:
+                    team_a = li.select_one('a[href*="/team/"]')
+                    team = team_a.text.strip() if team_a else ''
+                    if not team:
+                        spans = li.find_all('span')
+                        if len(spans) > 1:
+                            team = spans[-1].text.strip()
+                cyclists.append({
+                    'id': f'c_{i}',
+                    'name': name,
+                    'team': team,
+                    'nationality': '',
+                    'number': None,
+                })
+
+        if not cyclists:
+            return jsonify({'error': 'Startlist vazia ou formato não reconhecido.'}), 404
 
         return jsonify({'race': race, 'count': len(cyclists), 'cyclists': cyclists})
 
@@ -110,37 +113,29 @@ def get_startlist():
 
 
 # ──────────────────────────────────────────────
-#  GC (Classificação Geral após etapa)
+#  GC após etapa
 #  GET /api/gc?race=tour-de-france/2025&stage=10
 #  stage=latest para etapa mais recente
 # ──────────────────────────────────────────────
 @app.get('/api/gc')
 def get_gc():
-    if not PCS_AVAILABLE:
-        return jsonify({'error': 'procyclingstats não disponível.'}), 500
-
-    race = request.args.get('race', '').strip()
+    race = _clean_race(request.args.get('race', ''))
     stage_num = request.args.get('stage', 'latest').strip()
     if not race:
         return jsonify({'error': 'Parâmetro "race" obrigatório.'}), 400
-
     try:
         if stage_num == 'latest':
             stage_num = _find_latest_stage(race)
-            if stage_num is None:
-                return jsonify({'error': 'Não foi possível determinar a etapa mais recente.'}), 404
+            if not stage_num:
+                return jsonify({'error': 'Etapa mais recente não encontrada.'}), 404
 
-        parsed = Stage(f"race/{race}/stage-{stage_num}").parse()
+        soup = pcs_get(f"race/{race}/stage-{stage_num}/gc")
+        top20, jerseys = _parse_gc_page(soup)
+
         return jsonify({
-            'race': race,
-            'stage': stage_num,
-            'date': str(parsed.get('date', '')),
-            'departure': parsed.get('departure', ''),
-            'arrival': parsed.get('arrival', ''),
-            'top20': _parse_riders(parsed.get('gc', [])),
-            'jerseys': _extract_jerseys(parsed),
+            'race': race, 'stage': stage_num,
+            'top20': top20, 'jerseys': jerseys,
         })
-
     except Exception as e:
         return jsonify({'error': f'Erro ao buscar GC: {str(e)}'}), 500
 
@@ -151,26 +146,13 @@ def get_gc():
 # ──────────────────────────────────────────────
 @app.get('/api/oneday')
 def get_oneday():
-    if not PCS_AVAILABLE:
-        return jsonify({'error': 'procyclingstats não disponível.'}), 500
-
-    race = request.args.get('race', '').strip()
+    race = _clean_race(request.args.get('race', ''))
     if not race:
         return jsonify({'error': 'Parâmetro "race" obrigatório.'}), 400
-
-    for suffix in ['/result', '/startlist', '/overview']:
-        if race.endswith(suffix):
-            race = race[:-len(suffix)]
-
     try:
-        parsed = Stage(f"race/{race}/result").parse()
-        result_raw = parsed.get('stage', parsed.get('result', []))
-        return jsonify({
-            'race': race,
-            'date': str(parsed.get('date', '')),
-            'top20': _parse_riders(result_raw[:20]),
-        })
-
+        soup = pcs_get(f"race/{race}/result")
+        top20 = _parse_result_table(soup)
+        return jsonify({'race': race, 'top20': top20})
     except Exception as e:
         return jsonify({'error': f'Erro ao buscar resultado: {str(e)}'}), 500
 
@@ -181,104 +163,148 @@ def get_oneday():
 # ──────────────────────────────────────────────
 @app.get('/api/stages')
 def get_stages():
-    if not PCS_AVAILABLE:
-        return jsonify({'error': 'procyclingstats não disponível.'}), 500
-
-    race = request.args.get('race', '').strip()
+    race = _clean_race(request.args.get('race', ''))
     if not race:
         return jsonify({'error': 'Parâmetro "race" obrigatório.'}), 400
-
     try:
-        stages_raw = Race(f"race/{race}/overview").stages()
-        stages = [{
-            'num': _extract_stage_num(s.get('stage_url', '')),
-            'url': s.get('stage_url', ''),
-            'date': str(s.get('date', '')),
-            'departure': s.get('departure', ''),
-            'arrival': s.get('arrival', ''),
-            'distance': s.get('distance'),
-            'stage_type': s.get('stage_type', ''),
-        } for s in stages_raw]
-
+        soup = pcs_get(f"race/{race}/overview")
+        stages = []
+        for a in soup.select('a[href*="/stage-"]'):
+            href = a.get('href', '')
+            num = _extract_stage_num(href)
+            if num and not any(s['num'] == num for s in stages):
+                stages.append({'num': num, 'url': href, 'name': a.text.strip()})
         return jsonify({'race': race, 'count': len(stages), 'stages': stages})
-
     except Exception as e:
         return jsonify({'error': f'Erro ao buscar etapas: {str(e)}'}), 500
 
 
 # ──────────────────────────────────────────────
-#  HELPERS
+#  HELPERS — parsing
 # ──────────────────────────────────────────────
-def _parse_riders(raw):
-    result = []
-    for entry in raw[:20]:
-        name = entry.get('rider_name', '')
-        name = ' '.join(w.capitalize() for w in name.split())
-        result.append({
-            'pos': entry.get('rank'),
-            'name': name,
-            'team': entry.get('team_name', ''),
-            'time': _format_time(entry.get('time')),
-            'nationality': entry.get('nationality', ''),
-        })
-    return result
-
-
-def _format_time(t):
-    if t is None:
-        return ''
-    try:
-        total = int(t.total_seconds())
-        h, rem = divmod(total, 3600)
-        m, s = divmod(rem, 60)
-        return f"{h}:{m:02d}:{s:02d}" if h > 0 else f"+{m}:{s:02d}"
-    except Exception:
-        return str(t)
-
-
-def _extract_jerseys(parsed):
+def _parse_gc_page(soup):
+    """Extrai top-20 GC e camisolas de uma página de GC do PCS."""
+    top20 = []
     jerseys = {}
-    gc_raw = parsed.get('gc', [])
-    if gc_raw:
-        name = gc_raw[0].get('rider_name', '')
-        jerseys['gc'] = ' '.join(w.capitalize() for w in name.split())
-    for key, mapped in [('gc_jersey','gc'), ('points_jersey','points'),
-                        ('kom_jersey','mountain'), ('youth_jersey','youth')]:
-        val = parsed.get(key)
-        if val:
-            rider = val if isinstance(val, str) else val.get('rider_name', '')
-            jerseys[mapped] = ' '.join(w.capitalize() for w in rider.split())
-    return jerseys
+
+    rows = soup.select('table.basic tbody tr')
+    for row in rows[:20]:
+        tds = row.find_all('td')
+        if len(tds) < 3:
+            continue
+        pos_text = tds[0].text.strip()
+        pos = int(pos_text) if pos_text.isdigit() else len(top20) + 1
+        name_el = row.select_one('a[href*="/rider/"]')
+        team_el = row.select_one('a[href*="/team/"]')
+        if not name_el:
+            continue
+        time_text = tds[-1].text.strip()
+        top20.append({
+            'pos': pos,
+            'name': _title(name_el.text),
+            'team': team_el.text.strip() if team_el else '',
+            'time': time_text,
+        })
+
+    # Camisolas — secção de jersey leaders no topo da página
+    for div in soup.select('.jersey, .classification, [class*="jersey"]'):
+        cls = ' '.join(div.get('class', []))
+        rider_a = div.select_one('a[href*="/rider/"]')
+        if not rider_a:
+            continue
+        name = _title(rider_a.text)
+        if 'point' in cls or 'green' in cls:
+            jerseys['points'] = name
+        elif 'mountain' in cls or 'polka' in cls or 'kom' in cls:
+            jerseys['mountain'] = name
+        elif 'youth' in cls or 'white' in cls:
+            jerseys['youth'] = name
+
+    # Líder do GC = camisola amarela
+    if top20 and 'gc' not in jerseys:
+        jerseys['gc'] = top20[0]['name']
+
+    return top20, jerseys
+
+
+def _parse_result_table(soup):
+    """Extrai top-20 de uma tabela de resultados genérica."""
+    top20 = []
+    rows = soup.select('table.basic tbody tr')
+    for row in rows[:20]:
+        tds = row.find_all('td')
+        if len(tds) < 2:
+            continue
+        pos_text = tds[0].text.strip()
+        pos = int(pos_text) if pos_text.isdigit() else len(top20) + 1
+        name_el = row.select_one('a[href*="/rider/"]')
+        team_el = row.select_one('a[href*="/team/"]')
+        if not name_el:
+            continue
+        time_text = tds[-1].text.strip()
+        top20.append({
+            'pos': pos,
+            'name': _title(name_el.text),
+            'team': team_el.text.strip() if team_el else '',
+            'time': time_text,
+        })
+    return top20
 
 
 def _find_latest_stage(race):
+    """Descobre o número da última etapa já disputada."""
     from datetime import date
     try:
-        stages = Race(f"race/{race}/overview").stages()
+        soup = pcs_get(f"race/{race}/overview")
         today = date.today()
         latest = None
-        for s in stages:
-            d = s.get('date')
-            if d:
+        for a in soup.select('a[href*="/stage-"]'):
+            href = a.get('href', '')
+            num = _extract_stage_num(href)
+            if not num:
+                continue
+            # Tenta encontrar a data no texto próximo
+            parent = a.find_parent()
+            text = parent.text if parent else ''
+            date_match = re.search(r'(\d{2})[./](\d{2})', text)
+            if date_match:
                 try:
-                    if date.fromisoformat(str(d)[:10]) <= today:
-                        latest = _extract_stage_num(s.get('stage_url', ''))
+                    m, d = int(date_match.group(2)), int(date_match.group(1))
+                    y = today.year
+                    if date(y, m, d) <= today:
+                        latest = num
                 except Exception:
                     pass
+            else:
+                latest = num  # sem data, assume que já passou
         return latest
     except Exception:
         return None
 
 
-def _extract_stage_num(stage_url):
-    for part in reversed(stage_url.rstrip('/').split('/')):
+def _clean_race(race):
+    """Remove sufixos de URL desnecessários."""
+    race = race.strip()
+    for suffix in ['/startlist', '/overview', '/gc', '/result', '/route']:
+        if race.endswith(suffix):
+            race = race[:-len(suffix)]
+    return race
+
+
+def _extract_stage_num(url):
+    for part in reversed(url.rstrip('/').split('/')):
         if part.startswith('stage-'):
             return part.replace('stage-', '')
     return None
 
 
+def _title(text):
+    """Converte APELIDO Nome para Nome Apelido (title case)."""
+    return ' '.join(w.capitalize() for w in text.strip().split())
+
+
 # ──────────────────────────────────────────────
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 3000))
-    print(f"✅ VeloAposta a correr em http://localhost:{port}")
+    print(f"✅ VeloAposta v4 a correr em http://localhost:{port}")
     app.run(host='0.0.0.0', port=port, debug=False)
