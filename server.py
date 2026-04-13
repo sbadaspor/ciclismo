@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 import os
+import requests
 import cloudscraper
 
 app = Flask(__name__, static_folder='public')
@@ -14,28 +15,35 @@ scraper = cloudscraper.create_scraper(
     browser={'browser': 'chrome', 'platform': 'windows', 'mobile': False}
 )
 
-# Monkey-patch para que o procyclingstats use o nosso scraper
 try:
     import procyclingstats.scraper as pcs_scraper_module
-    import requests
 
-    class PatchedSession(requests.Session):
+    class CloudSession(requests.Session):
         def get(self, url, **kwargs):
             kwargs.pop('timeout', None)
-            resp = scraper.get(url, **kwargs)
-            return resp
+            return scraper.get(url, **kwargs)
 
-    pcs_scraper_module.requests = type('FakeRequests', (), {
-        'get': lambda url, **kw: scraper.get(url, **kw),
-        'Session': PatchedSession,
-    })()
+    class PatchedRequests:
+        Session           = CloudSession
+        RequestException  = requests.RequestException
+        exceptions        = requests.exceptions
+        HTTPError         = requests.HTTPError
+        ConnectionError   = requests.ConnectionError
+        Timeout           = requests.Timeout
+
+        @staticmethod
+        def get(url, **kwargs):
+            kwargs.pop('timeout', None)
+            return scraper.get(url, **kwargs)
+
+    pcs_scraper_module.requests = PatchedRequests()
 
     from procyclingstats import RaceStartlist, Stage, Race
     PCS_AVAILABLE = True
     print("✅ procyclingstats + cloudscraper prontos")
-except ImportError as e:
+except Exception as e:
     PCS_AVAILABLE = False
-    print(f"⚠ Erro ao importar procyclingstats: {e}")
+    print(f"⚠ Erro ao inicializar procyclingstats: {e}")
 
 
 # ──────────────────────────────────────────────
@@ -56,7 +64,7 @@ def serve(path):
 def health():
     return jsonify({
         'status': 'ok',
-        'version': '3.1.0',
+        'version': '3.2.0',
         'engine': 'procyclingstats + cloudscraper',
         'pcs_available': PCS_AVAILABLE
     })
@@ -75,20 +83,17 @@ def get_startlist():
     if not race:
         return jsonify({'error': 'Parâmetro "race" obrigatório. Ex: paris-roubaix/2026'}), 400
 
-    # Normaliza — remove sufixos desnecessários se o user colou o URL completo
     for suffix in ['/startlist/startlist', '/startlist', '/overview', '/gc', '/result']:
         if race.endswith(suffix):
             race = race[:-len(suffix)]
 
     try:
-        url = f"race/{race}/startlist"
-        sl = RaceStartlist(url)
+        sl = RaceStartlist(f"race/{race}/startlist")
         raw = sl.startlist()
 
         cyclists = []
         for r in raw:
             name = r.get('rider_name', '')
-            # PCS devolve nomes em MAIÚSCULAS — converte para Title Case
             name = ' '.join(w.capitalize() for w in name.split())
             cyclists.append({
                 'id': r.get('rider_url', '').replace('rider/', ''),
@@ -105,9 +110,9 @@ def get_startlist():
 
 
 # ──────────────────────────────────────────────
-#  GC (Classificação Geral)
+#  GC (Classificação Geral após etapa)
 #  GET /api/gc?race=tour-de-france/2025&stage=10
-#  stage=latest para a etapa mais recente
+#  stage=latest para etapa mais recente
 # ──────────────────────────────────────────────
 @app.get('/api/gc')
 def get_gc():
@@ -116,7 +121,6 @@ def get_gc():
 
     race = request.args.get('race', '').strip()
     stage_num = request.args.get('stage', 'latest').strip()
-
     if not race:
         return jsonify({'error': 'Parâmetro "race" obrigatório.'}), 400
 
@@ -126,21 +130,15 @@ def get_gc():
             if stage_num is None:
                 return jsonify({'error': 'Não foi possível determinar a etapa mais recente.'}), 404
 
-        url = f"race/{race}/stage-{stage_num}"
-        stage = Stage(url)
-        parsed = stage.parse()
-
-        top20 = _parse_gc(parsed.get('gc', []))
-        jerseys = _extract_jerseys(parsed)
-
+        parsed = Stage(f"race/{race}/stage-{stage_num}").parse()
         return jsonify({
             'race': race,
             'stage': stage_num,
             'date': str(parsed.get('date', '')),
             'departure': parsed.get('departure', ''),
             'arrival': parsed.get('arrival', ''),
-            'top20': top20,
-            'jerseys': jerseys,
+            'top20': _parse_riders(parsed.get('gc', [])),
+            'jerseys': _extract_jerseys(parsed),
         })
 
     except Exception as e:
@@ -148,7 +146,7 @@ def get_gc():
 
 
 # ──────────────────────────────────────────────
-#  Resultado de clássica (1 dia)
+#  Resultado clássica (1 dia)
 #  GET /api/oneday?race=paris-roubaix/2026
 # ──────────────────────────────────────────────
 @app.get('/api/oneday')
@@ -165,24 +163,13 @@ def get_oneday():
             race = race[:-len(suffix)]
 
     try:
-        url = f"race/{race}/result"
-        stage = Stage(url)
-        parsed = stage.parse()
-
+        parsed = Stage(f"race/{race}/result").parse()
         result_raw = parsed.get('stage', parsed.get('result', []))
-        top20 = []
-        for entry in result_raw[:20]:
-            name = entry.get('rider_name', '')
-            name = ' '.join(w.capitalize() for w in name.split())
-            top20.append({
-                'pos': entry.get('rank'),
-                'name': name,
-                'team': entry.get('team_name', ''),
-                'time': _format_time(entry.get('time')),
-                'nationality': entry.get('nationality', ''),
-            })
-
-        return jsonify({'race': race, 'date': str(parsed.get('date', '')), 'top20': top20})
+        return jsonify({
+            'race': race,
+            'date': str(parsed.get('date', '')),
+            'top20': _parse_riders(result_raw[:20]),
+        })
 
     except Exception as e:
         return jsonify({'error': f'Erro ao buscar resultado: {str(e)}'}), 500
@@ -202,22 +189,16 @@ def get_stages():
         return jsonify({'error': 'Parâmetro "race" obrigatório.'}), 400
 
     try:
-        url = f"race/{race}/overview"
-        r = Race(url)
-        stages_raw = r.stages()
-
-        stages = []
-        for s in stages_raw:
-            num = _extract_stage_num(s.get('stage_url', ''))
-            stages.append({
-                'num': num,
-                'url': s.get('stage_url', ''),
-                'date': str(s.get('date', '')),
-                'departure': s.get('departure', ''),
-                'arrival': s.get('arrival', ''),
-                'distance': s.get('distance'),
-                'stage_type': s.get('stage_type', ''),
-            })
+        stages_raw = Race(f"race/{race}/overview").stages()
+        stages = [{
+            'num': _extract_stage_num(s.get('stage_url', '')),
+            'url': s.get('stage_url', ''),
+            'date': str(s.get('date', '')),
+            'departure': s.get('departure', ''),
+            'arrival': s.get('arrival', ''),
+            'distance': s.get('distance'),
+            'stage_type': s.get('stage_type', ''),
+        } for s in stages_raw]
 
         return jsonify({'race': race, 'count': len(stages), 'stages': stages})
 
@@ -228,19 +209,19 @@ def get_stages():
 # ──────────────────────────────────────────────
 #  HELPERS
 # ──────────────────────────────────────────────
-def _parse_gc(gc_raw):
-    top20 = []
-    for entry in gc_raw[:20]:
+def _parse_riders(raw):
+    result = []
+    for entry in raw[:20]:
         name = entry.get('rider_name', '')
         name = ' '.join(w.capitalize() for w in name.split())
-        top20.append({
+        result.append({
             'pos': entry.get('rank'),
             'name': name,
             'team': entry.get('team_name', ''),
             'time': _format_time(entry.get('time')),
             'nationality': entry.get('nationality', ''),
         })
-    return top20
+    return result
 
 
 def _format_time(t):
@@ -248,12 +229,9 @@ def _format_time(t):
         return ''
     try:
         total = int(t.total_seconds())
-        h = total // 3600
-        m = (total % 3600) // 60
-        s = total % 60
-        if h > 0:
-            return f"{h}:{m:02d}:{s:02d}"
-        return f"+{m}:{s:02d}"
+        h, rem = divmod(total, 3600)
+        m, s = divmod(rem, 60)
+        return f"{h}:{m:02d}:{s:02d}" if h > 0 else f"+{m}:{s:02d}"
     except Exception:
         return str(t)
 
@@ -264,7 +242,8 @@ def _extract_jerseys(parsed):
     if gc_raw:
         name = gc_raw[0].get('rider_name', '')
         jerseys['gc'] = ' '.join(w.capitalize() for w in name.split())
-    for key, mapped in [('gc_jersey','gc'),('points_jersey','points'),('kom_jersey','mountain'),('youth_jersey','youth')]:
+    for key, mapped in [('gc_jersey','gc'), ('points_jersey','points'),
+                        ('kom_jersey','mountain'), ('youth_jersey','youth')]:
         val = parsed.get(key)
         if val:
             rider = val if isinstance(val, str) else val.get('rider_name', '')
@@ -273,19 +252,16 @@ def _extract_jerseys(parsed):
 
 
 def _find_latest_stage(race):
+    from datetime import date
     try:
-        from datetime import date
-        url = f"race/{race}/overview"
-        r = Race(url)
-        stages = r.stages()
+        stages = Race(f"race/{race}/overview").stages()
         today = date.today()
         latest = None
         for s in stages:
             d = s.get('date')
             if d:
                 try:
-                    stage_date = date.fromisoformat(str(d)[:10])
-                    if stage_date <= today:
+                    if date.fromisoformat(str(d)[:10]) <= today:
                         latest = _extract_stage_num(s.get('stage_url', ''))
                 except Exception:
                     pass
@@ -295,8 +271,7 @@ def _find_latest_stage(race):
 
 
 def _extract_stage_num(stage_url):
-    parts = stage_url.rstrip('/').split('/')
-    for part in reversed(parts):
+    for part in reversed(stage_url.rstrip('/').split('/')):
         if part.startswith('stage-'):
             return part.replace('stage-', '')
     return None
